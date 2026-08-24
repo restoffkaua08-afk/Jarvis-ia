@@ -93,6 +93,23 @@ class NativeReActAgent(ToolUsingAgent):
         self._system_prompt_override = system_prompt_override
         self._quality_gate = quality_gate
 
+    def _pre_mutation_missing(
+        self,
+        tool_trace: list[tuple[str, bool]],
+    ) -> list[str]:
+        """Return repository-inspection steps required before an edit."""
+        if not self._quality_gate:
+            return []
+        missing = []
+        if not any(name == "file_read" and ok for name, ok in tool_trace):
+            missing.append("inspect relevant files with file_read")
+        if not any(
+            name in {"git_status", "git_diff"} and ok
+            for name, ok in tool_trace
+        ):
+            missing.append("inspect repository state with git_status")
+        return missing
+
     def _quality_gate_missing(
         self,
         tool_trace: list[tuple[str, bool]],
@@ -289,6 +306,28 @@ class NativeReActAgent(ToolUsingAgent):
                 name=parsed["action"],
                 arguments=parsed["action_input"] or "{}",
             )
+
+            mutations = {"file_write", "apply_patch"}
+            inspection_missing = (
+                self._pre_mutation_missing(tool_trace)
+                if tool_call.name in mutations
+                else []
+            )
+            if inspection_missing:
+                tool_result = ToolResult(
+                    tool_name=tool_call.name,
+                    content=(
+                        "Pre-edit quality gate blocked this mutation. "
+                        + "; ".join(inspection_missing)
+                        + ". Inspect first, then retry the edit."
+                    ),
+                    success=False,
+                )
+                all_tool_results.append(tool_result)
+                tool_trace.append((tool_call.name, False))
+                observation = f"Observation: {tool_result.content}"
+                messages.append(Message(role=Role.USER, content=observation))
+                continue
 
             # Loop guard check before execution
             if self._loop_guard:
