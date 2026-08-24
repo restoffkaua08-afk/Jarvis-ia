@@ -17,6 +17,9 @@ def test_code_help_exposes_terminal_coding_options() -> None:
     assert "--model" in result.output
     assert "--engine" in result.output
     assert "--tools" in result.output
+    assert "--resume" in result.output
+    assert "--new-session" in result.output
+    assert "--check" in result.output
 
 
 def test_code_defaults_to_native_react_and_engineering_tools() -> None:
@@ -26,6 +29,7 @@ def test_code_defaults_to_native_react_and_engineering_tools() -> None:
         tools=None,
         pick_model=False,
         max_turns=30,
+        session_file="session.json",
     )
 
     assert kwargs["agent_name"] == "native_react"
@@ -35,6 +39,7 @@ def test_code_defaults_to_native_react_and_engineering_tools() -> None:
     assert kwargs["agent_max_turns"] == 30
     assert kwargs["model_variant"] == "code"
     assert kwargs["quality_gate"] is True
+    assert kwargs["session_file"] == "session.json"
 
 
 def test_code_tool_set_covers_edit_execute_and_review() -> None:
