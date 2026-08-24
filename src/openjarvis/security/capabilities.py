@@ -65,10 +65,19 @@ class CapabilityPolicy:
         self._policies: Dict[str, AgentPolicy] = {}
         self._default_deny = default_deny
 
-        from openjarvis._rust_bridge import get_rust_module
+        self._rust_impl = None
+        try:
+            from openjarvis._rust_bridge import get_rust_module
 
-        _rust = get_rust_module()
-        self._rust_impl = _rust.CapabilityPolicy(default_deny=default_deny)
+            _rust = get_rust_module()
+            self._rust_impl = _rust.CapabilityPolicy(
+                default_deny=default_deny
+            )
+        except (ImportError, AttributeError) as exc:
+            logger.debug(
+                "Rust capability policy unavailable; using Python fallback: %s",
+                exc,
+            )
 
         if policy_path:
             self._load_file(Path(policy_path))
@@ -80,7 +89,8 @@ class CapabilityPolicy:
             AgentPolicy(agent_id=agent_id),
         )
         policy.grants.append(CapabilityGrant(capability=capability, pattern=pattern))
-        self._rust_impl.grant(agent_id, capability, pattern)
+        if self._rust_impl is not None:
+            self._rust_impl.grant(agent_id, capability, pattern)
 
     def deny(self, agent_id: str, capability: str) -> None:
         """Explicitly deny a capability to an agent."""
@@ -89,17 +99,20 @@ class CapabilityPolicy:
             AgentPolicy(agent_id=agent_id),
         )
         policy.deny.append(capability)
-        self._rust_impl.deny(agent_id, capability)
+        if self._rust_impl is not None:
+            self._rust_impl.deny(agent_id, capability)
 
     def check(self, agent_id: str, capability: str, resource: str = "") -> bool:
         """Check whether *agent_id* has *capability* for *resource*.
 
         Returns True if allowed, False if denied.
         """
-        return self._rust_impl.check(agent_id, capability, resource)
+        if self._rust_impl is not None:
+            return self._rust_impl.check(agent_id, capability, resource)
+        return self._check_python(agent_id, capability, resource)
 
     def _check_python(self, agent_id: str, capability: str, resource: str = "") -> bool:
-        """Legacy Python check — kept for reference only."""
+        """Check capabilities without the optional Rust extension."""
         policy = self._policies.get(agent_id)
         if policy is None:
             # No explicit policy — use default
