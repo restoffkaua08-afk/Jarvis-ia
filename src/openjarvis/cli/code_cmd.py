@@ -131,6 +131,18 @@ def build_code_chat_kwargs(
     default=False,
     help="Diagnose Jarvis Code without starting a model session.",
 )
+@click.option(
+    "--benchmark-prepare",
+    is_flag=True,
+    default=False,
+    help="Create an isolated coding benchmark and print its task.",
+)
+@click.option(
+    "--benchmark-evaluate",
+    type=click.Path(path_type=Path, file_okay=False),
+    default=None,
+    help="Evaluate a prepared benchmark workspace and emit JSON.",
+)
 @click.pass_context
 def code(
     ctx: click.Context,
@@ -142,6 +154,8 @@ def code(
     resume: bool,
     new_session: bool,
     check_only: bool,
+    benchmark_prepare: bool,
+    benchmark_evaluate: Path | None,
 ) -> None:
     """Start Jarvis as an interactive coding agent in the current project."""
     from openjarvis.cli.code_session import (
@@ -150,6 +164,28 @@ def code(
     )
 
     project = Path.cwd()
+    benchmark_modes = sum(
+        (check_only, benchmark_prepare, benchmark_evaluate is not None)
+    )
+    if benchmark_modes > 1:
+        raise click.UsageError(
+            "--check and benchmark options are mutually exclusive"
+        )
+    if benchmark_prepare:
+        from openjarvis.cli.code_benchmark import prepare_code_benchmark
+
+        workspace = prepare_code_benchmark()
+        click.echo(f"Workspace: {workspace.path}")
+        click.echo("\nTask:\n" + workspace.prompt)
+        return
+    if benchmark_evaluate is not None:
+        from openjarvis.cli.code_benchmark import evaluate_code_benchmark
+
+        report = evaluate_code_benchmark(benchmark_evaluate)
+        click.echo(report.to_json())
+        if not report.passed:
+            raise click.exceptions.Exit(code=1)
+        return
     if check_only:
         from openjarvis.cli.code_doctor import run_code_checks
 
