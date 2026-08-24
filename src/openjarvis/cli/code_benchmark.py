@@ -96,6 +96,10 @@ def prepare_code_benchmark(parent: Path | None = None) -> BenchmarkWorkspace:
         "    unittest.main()\n",
         encoding="utf-8",
     )
+    (project / ".gitignore").write_text(
+        "__pycache__/\n*.py[cod]\n",
+        encoding="utf-8",
+    )
     (project / "BENCHMARK.json").write_text(
         json.dumps(
             {"version": BENCHMARK_VERSION, "allowed_changes": ["calculator.py"]},
