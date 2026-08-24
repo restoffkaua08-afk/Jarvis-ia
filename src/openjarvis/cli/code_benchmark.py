@@ -138,7 +138,11 @@ def evaluate_code_benchmark(project: Path) -> BenchmarkReport:
         raise RuntimeError(status.stderr.strip() or "Failed to inspect Git status")
 
     changed = tuple(
-        sorted(line[3:].strip() for line in status.stdout.splitlines() if line[3:].strip())
+        sorted(
+            line[3:].strip()
+            for line in status.stdout.splitlines()
+            if line[3:].strip()
+        )
     )
     allowed = set(manifest.get("allowed_changes", ()))
     diff_present = bool(changed)
