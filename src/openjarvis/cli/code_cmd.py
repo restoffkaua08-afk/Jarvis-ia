@@ -124,6 +124,13 @@ def build_code_chat_kwargs(
     default=False,
     help="Clear the current project's saved session before starting.",
 )
+@click.option(
+    "--check",
+    "check_only",
+    is_flag=True,
+    default=False,
+    help="Diagnose Jarvis Code without starting a model session.",
+)
 @click.pass_context
 def code(
     ctx: click.Context,
@@ -134,6 +141,7 @@ def code(
     max_turns: int,
     resume: bool,
     new_session: bool,
+    check_only: bool,
 ) -> None:
     """Start Jarvis as an interactive coding agent in the current project."""
     from openjarvis.cli.code_session import (
@@ -142,6 +150,18 @@ def code(
     )
 
     project = Path.cwd()
+    if check_only:
+        from openjarvis.cli.code_doctor import run_code_checks
+
+        checks = run_code_checks(project)
+        for check in checks:
+            click.echo(
+                f"[{check.status.upper():4}] {check.name}: {check.message}"
+            )
+        if any(check.status == "fail" for check in checks):
+            raise click.exceptions.Exit(code=1)
+        return
+
     if new_session and not resume:
         raise click.UsageError("--new-session cannot be used with --no-resume")
     session_path = session_path_for_project(project)
