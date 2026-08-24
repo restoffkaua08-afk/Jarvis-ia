@@ -519,19 +519,60 @@ class OrchestratorAgent(ToolUsingAgent):
                         )
                     )
 
-        # Max turns exceeded
-        final_content = self._strip_think_tags(content) if content else ""
-        self._emit_turn_end(turns=turns, max_turns_exceeded=True)
+        # The tool-call budget is exhausted, but the accumulated observations
+        # may already be enough to answer the user. Make one tools-disabled
+        # synthesis attempt instead of exposing an internal control-flow error
+        # as the final response.
+        messages.append(
+            Message(
+                role=Role.USER,
+                content=(
+                    "The tool-call budget is exhausted. Do not call any tools. "
+                    "Using only the information already available in this "
+                    "conversation, provide the best complete final answer now. "
+                    "Be explicit about anything that could not be verified."
+                ),
+            )
+        )
+
+        finalization_attempted = True
+        finalization_succeeded = False
+        finalization_error = ""
+        final_content = ""
+        try:
+            final_result = self._generate(messages)
+            final_usage = final_result.get("usage", {})
+            total_prompt_tokens += final_usage.get("prompt_tokens", 0)
+            total_completion_tokens += final_usage.get("completion_tokens", 0)
+            final_content = self._strip_think_tags(
+                final_result.get("content", "")
+            )
+            finalization_succeeded = bool(final_content)
+        except Exception as exc:  # preserve the original run result on failure
+            finalization_error = type(exc).__name__
+
+        self._emit_turn_end(
+            turns=turns,
+            max_turns_exceeded=True,
+            finalization_succeeded=finalization_succeeded,
+        )
+        metadata = {
+            "max_turns_exceeded": True,
+            "finalization_attempted": finalization_attempted,
+            "finalization_succeeded": finalization_succeeded,
+            "prompt_tokens": total_prompt_tokens,
+            "completion_tokens": total_completion_tokens,
+            "total_tokens": total_prompt_tokens + total_completion_tokens,
+        }
+        if finalization_error:
+            metadata["finalization_error"] = finalization_error
+
         return AgentResult(
-            content=final_content or "Maximum turns reached without a final answer.",
+            content=final_content
+            or "Maximum turns reached without a final answer.",
             tool_results=all_tool_results,
             turns=turns,
-            metadata={
-                "max_turns_exceeded": True,
-                "prompt_tokens": total_prompt_tokens,
-                "completion_tokens": total_completion_tokens,
-                "total_tokens": total_prompt_tokens + total_completion_tokens,
-            },
+            metadata=metadata,
         )
 
 
