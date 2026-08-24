@@ -39,6 +39,26 @@ class TestCapabilityPolicy:
         assert policy.check("agent1", "file:read")
         assert policy.check("agent1", "code:execute")
 
+    def test_python_fallback_when_rust_extension_is_unavailable(
+        self,
+        monkeypatch,
+    ):
+        from openjarvis import _rust_bridge
+
+        def _unavailable():
+            raise ImportError("native extension not installed")
+
+        monkeypatch.setattr(_rust_bridge, "get_rust_module", _unavailable)
+
+        policy = CapabilityPolicy(default_deny=True)
+        policy.grant("reader", "file:read", "/workspace/*")
+        policy.deny("reader", "file:write")
+
+        assert policy._rust_impl is None
+        assert policy.check("reader", "file:read", "/workspace/data.txt")
+        assert not policy.check("reader", "file:read", "/etc/passwd")
+        assert not policy.check("reader", "file:write", "/workspace/data.txt")
+
     def test_default_deny(self):
         policy = CapabilityPolicy(default_deny=True)
         assert not policy.check("agent1", "file:read")
