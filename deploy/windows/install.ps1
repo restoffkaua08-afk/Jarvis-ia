@@ -285,7 +285,7 @@ if (Test-Path (Join-Path $srcDir '.git')) {
 # ---------------------------------------------------------------------------
 
 $syncArgs = if ($CliOnly) {
-    @('sync')
+    @('sync', '--extra', 'inference-cloud')
 } else {
     @('sync', '--extra', 'desktop', '--group', 'desktop-native')
 }
