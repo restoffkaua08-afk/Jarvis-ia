@@ -239,6 +239,60 @@ class TestOrchestratorAgent:
         assert result.turns == 3
         assert result.metadata.get("max_turns_exceeded") is True
 
+    def test_max_turns_attempts_tools_disabled_finalization(self):
+        """Synthesize a final answer after the tool-call budget is exhausted."""
+        engine = MagicMock()
+        engine.engine_id = "mock"
+        tool_response = {
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "c1",
+                    "name": "calculator",
+                    "arguments": '{"expression":"1+1"}',
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 5,
+                "completion_tokens": 3,
+                "total_tokens": 8,
+            },
+            "model": "test-model",
+            "finish_reason": "tool_calls",
+        }
+        final_response = {
+            "content": "I could not continue using tools, but 1+1 equals 2.",
+            "usage": {
+                "prompt_tokens": 15,
+                "completion_tokens": 8,
+                "total_tokens": 23,
+            },
+            "model": "test-model",
+            "finish_reason": "stop",
+        }
+        engine.generate.side_effect = [
+            tool_response,
+            tool_response,
+            final_response,
+        ]
+        agent = OrchestratorAgent(
+            engine,
+            "test-model",
+            tools=[_CalculatorStub()],
+            max_turns=2,
+        )
+
+        result = agent.run("Loop, then answer")
+
+        assert result.turns == 2
+        assert result.content == "I could not continue using tools, but 1+1 equals 2."
+        assert result.metadata["max_turns_exceeded"] is True
+        assert result.metadata["finalization_attempted"] is True
+        assert result.metadata["finalization_succeeded"] is True
+        assert engine.generate.call_count == 3
+        final_kwargs = engine.generate.call_args_list[-1].kwargs
+        assert "tools" not in final_kwargs
+
     def test_unknown_tool_in_response(self):
         engine = _make_engine_with_tool_call(
             tool_name="unknown_tool",
