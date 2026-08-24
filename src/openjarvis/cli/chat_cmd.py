@@ -236,10 +236,13 @@ def chat(
 
                 import inspect as _inspect
 
-                if (
-                    "prompt_builder"
-                    in _inspect.signature(agent_cls.__init__).parameters
-                ):
+                init_parameters = _inspect.signature(
+                    agent_cls.__init__
+                ).parameters
+                if "system_prompt_override" in init_parameters and system_prompt:
+                    kwargs["system_prompt_override"] = system_prompt
+
+                if "prompt_builder" in init_parameters:
                     from openjarvis.prompt.builder import SystemPromptBuilder
 
                     kwargs["prompt_builder"] = SystemPromptBuilder(
