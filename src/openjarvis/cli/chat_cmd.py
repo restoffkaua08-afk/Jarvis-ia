@@ -183,6 +183,21 @@ def chat(
         console.print("[red]No model available.[/red]")
         sys.exit(1)
 
+    try:
+        serves_model = engine.can_serve(model)
+    except Exception:
+        serves_model = False
+    if not serves_model:
+        model_resolved = get_engine(config, engine_key, model)
+        if model_resolved is None:
+            console.print(
+                "[red]No configured engine can serve model "
+                f"'{_safe_rich_label(model)}'. Check the provider credential "
+                "and install the matching inference extra.[/red]"
+            )
+            sys.exit(1)
+        engine_name, engine = model_resolved
+
     from openjarvis.cli._runtime_panel import (
         ChatRuntimeOptions,
         interactive_pick_runtime_options,
