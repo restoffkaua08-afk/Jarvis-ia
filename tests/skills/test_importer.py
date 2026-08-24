@@ -165,6 +165,29 @@ class TestImportSkill:
         assert (target / "references" / "REFERENCE.md").exists()
         assert (target / "assets" / "template.txt").exists()
 
+    def test_rejects_repository_symlink_before_copy(self, tmp_path: Path):
+        target_root = tmp_path / "skills"
+        resolved = _make_resolved(tmp_path)
+        references = resolved.path / "references"
+        references.mkdir()
+        outside = tmp_path / "outside.txt"
+        outside.write_text("private")
+        try:
+            (references / "escape.txt").symlink_to(outside)
+        except OSError:
+            pytest.skip("Symlinks are not available in this environment")
+
+        importer = SkillImporter(
+            parser=SkillParser(),
+            tool_translator=ToolTranslator(),
+            target_root=target_root,
+        )
+        result = importer.import_skill(resolved)
+
+        assert not result.success
+        assert any("symlink" in warning.lower() for warning in result.warnings)
+        assert not (target_root / "hermes" / "my-skill").exists()
+
     def test_force_overwrites_existing_install(self, tmp_path: Path):
         target_root = tmp_path / "skills"
         importer = SkillImporter(
