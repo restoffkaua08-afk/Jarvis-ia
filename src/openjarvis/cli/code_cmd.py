@@ -71,6 +71,7 @@ def build_code_chat_kwargs(
     model_name: str | None,
     tools: str | None,
     pick_model: bool,
+    max_turns: int,
 ) -> dict[str, object]:
     """Build the delegated chat parameters for deterministic testing."""
     return {
@@ -82,6 +83,9 @@ def build_code_chat_kwargs(
         "system_prompt": CODE_SYSTEM_PROMPT,
         "persona_name": None,
         "voice_mode": False,
+        "agent_max_turns": max_turns,
+        "model_variant": "code",
+        "quality_gate": True,
     }
 
 
@@ -99,6 +103,13 @@ def build_code_chat_kwargs(
     default=False,
     help="Choose the model interactively before starting.",
 )
+@click.option(
+    "--max-turns",
+    type=click.IntRange(5, 100),
+    default=30,
+    show_default=True,
+    help="Maximum planning, implementation and verification turns.",
+)
 @click.pass_context
 def code(
     ctx: click.Context,
@@ -106,6 +117,7 @@ def code(
     model_name: str | None,
     tools: str | None,
     pick_model: bool,
+    max_turns: int,
 ) -> None:
     """Start Jarvis as an interactive coding agent in the current project."""
     ctx.invoke(
@@ -115,6 +127,7 @@ def code(
             model_name=model_name,
             tools=tools,
             pick_model=pick_model,
+            max_turns=max_turns,
         ),
     )
 
