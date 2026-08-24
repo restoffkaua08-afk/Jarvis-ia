@@ -25,12 +25,16 @@ def test_code_defaults_to_native_react_and_engineering_tools() -> None:
         model_name=None,
         tools=None,
         pick_model=False,
+        max_turns=30,
     )
 
     assert kwargs["agent_name"] == "native_react"
     assert kwargs["tools"] == DEFAULT_CODE_TOOLS
     assert kwargs["system_prompt"] == CODE_SYSTEM_PROMPT
     assert kwargs["voice_mode"] is False
+    assert kwargs["agent_max_turns"] == 30
+    assert kwargs["model_variant"] == "code"
+    assert kwargs["quality_gate"] is True
 
 
 def test_code_tool_set_covers_edit_execute_and_review() -> None:
