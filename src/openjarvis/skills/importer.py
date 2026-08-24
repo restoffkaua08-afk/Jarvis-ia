@@ -93,6 +93,19 @@ class SkillImporter:
             )
             return result
 
+        # Reject symlinks before parsing or copying external content. Following
+        # a repository symlink could copy files from outside the cloned source.
+        unsafe_link = self._find_unsafe_symlink(
+            resolved.path,
+            include_scripts=with_scripts,
+        )
+        if unsafe_link is not None:
+            result.success = False
+            result.warnings.append(
+                f"Refusing to import repository symlink: {unsafe_link}"
+            )
+            return result
+
         # 1. Parse source SKILL.md
         source_md = resolved.path / "SKILL.md"
         if not source_md.exists():
@@ -186,6 +199,28 @@ class SkillImporter:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _find_unsafe_symlink(
+        self,
+        source_root: Path,
+        *,
+        include_scripts: bool,
+    ) -> Path | None:
+        """Return the first symlink that an import could read or copy."""
+        roots = [source_root]
+        roots.extend(source_root / name for name in COPIED_SUBDIRS)
+        if include_scripts:
+            roots.append(source_root / "scripts")
+
+        for root in roots:
+            if not root.exists() and not root.is_symlink():
+                continue
+            if root.is_symlink():
+                return root
+            for candidate in root.rglob("*"):
+                if candidate.is_symlink():
+                    return candidate
+        return None
 
     def _read_skill_md(self, path: Path) -> tuple[dict, str]:
         """Parse a SKILL.md file into (frontmatter dict, markdown body)."""
