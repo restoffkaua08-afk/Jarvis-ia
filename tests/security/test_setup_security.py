@@ -72,6 +72,23 @@ class TestSetupSecurityEnabled:
         assert isinstance(sec, SecurityContext)
 
 
+class TestCapabilityPolicySetup:
+    def test_default_config_enables_compatible_policy(self) -> None:
+        cfg = JarvisConfig()
+        sec = setup_security(cfg, _make_mock_engine())
+
+        assert sec.capability_policy is not None
+        assert sec.capability_policy.check("unconfigured", "file:read") is True
+
+    def test_default_deny_is_forwarded_to_policy(self) -> None:
+        cfg = JarvisConfig()
+        cfg.security.capabilities.default_deny = True
+        sec = setup_security(cfg, _make_mock_engine())
+
+        assert sec.capability_policy is not None
+        assert sec.capability_policy.check("unconfigured", "file:read") is False
+
+
 class TestSetupSecurityDisabled:
     def test_returns_original_engine(self) -> None:
         engine = _make_mock_engine()
