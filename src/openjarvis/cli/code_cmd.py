@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import click
+from pathlib import Path
 
 from openjarvis.cli.chat_cmd import chat
 
@@ -72,6 +73,7 @@ def build_code_chat_kwargs(
     tools: str | None,
     pick_model: bool,
     max_turns: int,
+    session_file: str,
 ) -> dict[str, object]:
     """Build the delegated chat parameters for deterministic testing."""
     return {
@@ -86,6 +88,7 @@ def build_code_chat_kwargs(
         "agent_max_turns": max_turns,
         "model_variant": "code",
         "quality_gate": True,
+        "session_file": session_file,
     }
 
 
@@ -110,6 +113,17 @@ def build_code_chat_kwargs(
     show_default=True,
     help="Maximum planning, implementation and verification turns.",
 )
+@click.option(
+    "--resume/--no-resume",
+    default=True,
+    help="Restore and save the private session for the current project.",
+)
+@click.option(
+    "--new-session",
+    is_flag=True,
+    default=False,
+    help="Clear the current project's saved session before starting.",
+)
 @click.pass_context
 def code(
     ctx: click.Context,
@@ -118,8 +132,22 @@ def code(
     tools: str | None,
     pick_model: bool,
     max_turns: int,
+    resume: bool,
+    new_session: bool,
 ) -> None:
     """Start Jarvis as an interactive coding agent in the current project."""
+    from openjarvis.cli.code_session import (
+        clear_project_session,
+        session_path_for_project,
+    )
+
+    project = Path.cwd()
+    if new_session and not resume:
+        raise click.UsageError("--new-session cannot be used with --no-resume")
+    session_path = session_path_for_project(project)
+    if new_session:
+        clear_project_session(project, path=session_path)
+
     ctx.invoke(
         chat,
         **build_code_chat_kwargs(
@@ -128,6 +156,7 @@ def code(
             tools=tools,
             pick_model=pick_model,
             max_turns=max_turns,
+            session_file=str(session_path) if resume else "",
         ),
     )
 
