@@ -76,6 +76,7 @@ class NativeReActAgent(ToolUsingAgent):
         confirm_callback=None,
         skill_few_shot_examples: Optional[List[str]] = None,
         system_prompt_override: Optional[str] = None,
+        quality_gate: bool = False,
     ) -> None:
         super().__init__(
             engine,
@@ -90,6 +91,33 @@ class NativeReActAgent(ToolUsingAgent):
             skill_few_shot_examples=skill_few_shot_examples,
         )
         self._system_prompt_override = system_prompt_override
+        self._quality_gate = quality_gate
+
+    def _quality_gate_missing(
+        self,
+        tool_trace: list[tuple[str, bool]],
+    ) -> list[str]:
+        """Return verification steps missing after the last project edit."""
+        if not self._quality_gate:
+            return []
+        mutations = {"file_write", "apply_patch"}
+        last_mutation = max(
+            (
+                index
+                for index, (name, success) in enumerate(tool_trace)
+                if success and name in mutations
+            ),
+            default=-1,
+        )
+        if last_mutation < 0:
+            return []
+        later = tool_trace[last_mutation + 1 :]
+        missing = []
+        if not any(name == "shell_exec" and ok for name, ok in later):
+            missing.append("run relevant tests or build checks with shell_exec")
+        if not any(name == "git_diff" and ok for name, ok in later):
+            missing.append("review the resulting changes with git_diff")
+        return missing
 
     def _parse_response(self, text: str) -> dict:
         """Parse ReAct structured output."""
@@ -173,6 +201,7 @@ class NativeReActAgent(ToolUsingAgent):
                 messages.insert(-1, Message(role=Role.ASSISTANT, content=ex["output"]))
 
         all_tool_results: list[ToolResult] = []
+        tool_trace: list[tuple[str, bool]] = []
         turns = 0
         total_usage: dict[str, int] = {
             "prompt_tokens": 0,
@@ -196,24 +225,60 @@ class NativeReActAgent(ToolUsingAgent):
 
             # Final answer?
             if parsed["final_answer"]:
+                missing = self._quality_gate_missing(tool_trace)
+                if missing and turns < self._max_turns:
+                    messages.append(Message(role=Role.ASSISTANT, content=content))
+                    messages.append(
+                        Message(
+                            role=Role.USER,
+                            content=(
+                                "Quality gate incomplete. Before the final "
+                                "answer: " + "; ".join(missing) + "."
+                            ),
+                        )
+                    )
+                    continue
                 self._emit_turn_end(turns=turns)
                 msg_dicts = [_message_to_dict(m) for m in messages]
                 return AgentResult(
                     content=parsed["final_answer"],
                     tool_results=all_tool_results,
                     turns=turns,
-                    metadata={**total_usage, "messages": msg_dicts},
+                    metadata={
+                        **total_usage,
+                        "messages": msg_dicts,
+                        "quality_gate_passed": not missing,
+                        "quality_gate_missing": missing,
+                    },
                 )
 
             # No action? Treat content as final answer
             if not parsed["action"]:
+                missing = self._quality_gate_missing(tool_trace)
+                if missing and turns < self._max_turns:
+                    messages.append(Message(role=Role.ASSISTANT, content=content))
+                    messages.append(
+                        Message(
+                            role=Role.USER,
+                            content=(
+                                "Quality gate incomplete. Before the final "
+                                "answer: " + "; ".join(missing) + "."
+                            ),
+                        )
+                    )
+                    continue
                 self._emit_turn_end(turns=turns)
                 msg_dicts = [_message_to_dict(m) for m in messages]
                 return AgentResult(
                     content=content,
                     tool_results=all_tool_results,
                     turns=turns,
-                    metadata={**total_usage, "messages": msg_dicts},
+                    metadata={
+                        **total_usage,
+                        "messages": msg_dicts,
+                        "quality_gate_passed": not missing,
+                        "quality_gate_missing": missing,
+                    },
                 )
 
             # Execute action
@@ -238,12 +303,14 @@ class NativeReActAgent(ToolUsingAgent):
                         success=False,
                     )
                     all_tool_results.append(tool_result)
+                    tool_trace.append((tool_call.name, tool_result.success))
                     observation = f"Observation: {tool_result.content}"
                     messages.append(Message(role=Role.USER, content=observation))
                     continue
 
             tool_result = self._executor.execute(tool_call)
             all_tool_results.append(tool_result)
+            tool_trace.append((tool_call.name, tool_result.success))
 
             observation = f"Observation: {tool_result.content}"
             messages.append(Message(role=Role.USER, content=observation))
