@@ -6,6 +6,7 @@ from pathlib import Path
 
 from openjarvis.core.config import (
     AgentConfig,
+    CapabilitiesConfig,
     ChannelConfig,
     EngineConfig,
     GpuInfo,
@@ -142,6 +143,22 @@ class TestGenerateToml:
 
 
 class TestSecurityConfig:
+    def test_capabilities_config_defaults(self) -> None:
+        capabilities = CapabilitiesConfig()
+        assert capabilities.enabled is True
+        assert capabilities.default_deny is False
+
+    def test_capabilities_config_loads_from_toml(self, tmp_path: Path) -> None:
+        toml_file = tmp_path / "config.toml"
+        toml_file.write_text(
+            "[security.capabilities]\n"
+            "enabled = true\n"
+            "default_deny = true\n"
+        )
+        cfg = load_config(toml_file)
+        assert cfg.security.capabilities.enabled is True
+        assert cfg.security.capabilities.default_deny is True
+
     def test_security_config_defaults(self) -> None:
         sc = SecurityConfig()
         assert sc.enabled is True
