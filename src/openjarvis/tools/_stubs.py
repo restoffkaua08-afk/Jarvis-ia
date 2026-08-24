@@ -259,9 +259,22 @@ class ToolExecutor:
                     success=False,
                 )
 
-        # RBAC capability check
-        if self._capability_policy and tool.spec.required_capabilities:
-            for cap in tool.spec.required_capabilities:
+        # RBAC capability check. Tool-local declarations take precedence,
+        # while the central registry protects built-ins whose ToolSpec omits
+        # capabilities. Without this fallback, a missing metadata field makes
+        # the policy silently fail open.
+        required_capabilities = list(tool.spec.required_capabilities)
+        if not required_capabilities:
+            from openjarvis.security.capabilities import (
+                DEFAULT_TOOL_CAPABILITIES,
+            )
+
+            required_capabilities = list(
+                DEFAULT_TOOL_CAPABILITIES.get(tool_call.name, [])
+            )
+
+        if self._capability_policy and required_capabilities:
+            for cap in required_capabilities:
                 if not self._capability_policy.check(
                     self._agent_id,
                     cap,
