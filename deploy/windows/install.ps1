@@ -52,7 +52,10 @@
 param(
     [switch] $SkipService,
     [switch] $Service,
-    [switch] $Force
+    [switch] $Force,
+    [switch] $CliOnly,
+    [switch] $SkipOllama,
+    [string] $Repository = 'https://github.com/restoffkaua08-afk/Jarvis-ia.git'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -63,6 +66,9 @@ $ErrorActionPreference = 'Stop'
 if (-not $SkipService -and $env:OPENJARVIS_SKIP_SERVICE) { $SkipService = $true }
 if (-not $Service     -and $env:OPENJARVIS_SERVICE)      { $Service     = $true }
 if (-not $Force       -and $env:OPENJARVIS_FORCE)        { $Force       = $true }
+if (-not $CliOnly     -and $env:OPENJARVIS_CLI_ONLY)     { $CliOnly     = $true }
+if (-not $SkipOllama  -and $env:OPENJARVIS_SKIP_OLLAMA)  { $SkipOllama  = $true }
+if ($env:OPENJARVIS_REPO_URL) { $Repository = $env:OPENJARVIS_REPO_URL }
 
 # ---------------------------------------------------------------------------
 # Output helpers - coloured but plain enough for Constrained Language Mode.
@@ -257,11 +263,7 @@ if (-not (Test-Path $installRoot)) {
     New-Item -ItemType Directory -Path $installRoot | Out-Null
 }
 
-$repoUrl = if ($env:OPENJARVIS_REPO_URL) {
-    $env:OPENJARVIS_REPO_URL
-} else {
-    'https://github.com/open-jarvis/OpenJarvis.git'
-}
+$repoUrl = $Repository
 
 if (Test-Path (Join-Path $srcDir '.git')) {
     if ($Force) {
@@ -282,10 +284,15 @@ if (Test-Path (Join-Path $srcDir '.git')) {
 # 6. uv sync --extra desktop --group desktop-native
 # ---------------------------------------------------------------------------
 
-Write-Info "Running 'uv sync --extra desktop --group desktop-native' in $srcDir (this can take a few minutes)..."
+$syncArgs = if ($CliOnly) {
+    @('sync')
+} else {
+    @('sync', '--extra', 'desktop', '--group', 'desktop-native')
+}
+Write-Info "Running 'uv $($syncArgs -join ' ')' in $srcDir..."
 Push-Location $srcDir
 try {
-    & $uvExe sync --extra desktop --group desktop-native
+    & $uvExe @syncArgs
     if ($LASTEXITCODE -ne 0) {
         Write-Fail "uv sync failed with exit code $LASTEXITCODE. Check the output above."
     }
@@ -298,6 +305,10 @@ Write-Ok "Dependencies installed"
 # 7. Ollama - install + start + wait for daemon
 # ---------------------------------------------------------------------------
 
+$ollamaExe = $null
+if ($SkipOllama) {
+    Write-Warn2 "Skipping Ollama installation by explicit request."
+} else {
 Write-Info "Checking Ollama..."
 $ollamaExe = (Get-Command ollama -ErrorAction SilentlyContinue).Source
 if (-not $ollamaExe) {
@@ -333,12 +344,14 @@ if (-not $ollamaExe) {
     }
 }
 Write-Ok "Ollama ($ollamaExe)"
+}
 
 # Make sure the daemon is actually responsive before pulling. The Ollama
 # Windows installer launches the tray app at install time, but on a re-
 # run with an existing install the daemon may not be running yet.
-Write-Info "Waiting for Ollama daemon..."
 $ollamaReady = $false
+if ($ollamaExe) {
+Write-Info "Waiting for Ollama daemon..."
 for ($i = 0; $i -lt 60; $i++) {
     # 'ollama list' writes to stderr until the daemon is reachable; under
     # $ErrorActionPreference='Stop' the 2>&1 merge surfaces that as a
@@ -359,7 +372,8 @@ for ($i = 0; $i -lt 60; $i++) {
     Start-Sleep -Seconds 1
 }
 if (-not $ollamaReady) {
-    Write-Warn2 "Ollama daemon didn't become ready in 60s. Continuing - bg-orchestrator will retry later."
+    Write-Warn2 "Ollama daemon didn't become ready in 60s. Continuing."
+}
 }
 
 # ---------------------------------------------------------------------------
@@ -427,6 +441,22 @@ if (-not $pathOnUser) {
     $pathNeedsRefresh = $true
 }
 Write-Ok "jarvis shim installed at $shimPath"
+
+Write-Info "Validating the installed Jarvis CLI..."
+Push-Location $srcDir
+try {
+    & $uvExe run jarvis --help | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "Installed CLI validation failed."
+    }
+    & $uvExe run jarvis code --benchmark-prepare | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "Jarvis Code benchmark preparation validation failed."
+    }
+} finally {
+    Pop-Location
+}
+Write-Ok "Jarvis CLI and Code benchmark are operational"
 
 # ---------------------------------------------------------------------------
 # 10. Optional: register the scheduled-task service
