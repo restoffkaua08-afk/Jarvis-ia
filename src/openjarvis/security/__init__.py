@@ -68,6 +68,7 @@ def setup_security(
 
             cap_policy = CapabilityPolicy(
                 policy_path=config.security.capabilities.policy_path or None,
+                default_deny=config.security.capabilities.default_deny,
             )
         except Exception as exc:
             logger.debug("Failed to set up capability policy: %s", exc)
