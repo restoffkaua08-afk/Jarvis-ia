@@ -143,6 +143,13 @@ def build_code_chat_kwargs(
     default=None,
     help="Evaluate a prepared benchmark workspace and emit JSON.",
 )
+@click.option(
+    "--benchmark-profile",
+    type=click.Choice(("basic", "multifile"), case_sensitive=False),
+    default="basic",
+    show_default=True,
+    help="Fixture profile used with --benchmark-prepare.",
+)
 @click.pass_context
 def code(
     ctx: click.Context,
@@ -156,6 +163,7 @@ def code(
     check_only: bool,
     benchmark_prepare: bool,
     benchmark_evaluate: Path | None,
+    benchmark_profile: str,
 ) -> None:
     """Start Jarvis as an interactive coding agent in the current project."""
     from openjarvis.cli.code_session import (
@@ -174,10 +182,14 @@ def code(
     if benchmark_prepare:
         from openjarvis.cli.code_benchmark import prepare_code_benchmark
 
-        workspace = prepare_code_benchmark()
+        workspace = prepare_code_benchmark(profile=benchmark_profile)
         click.echo(f"Workspace: {workspace.path}")
         click.echo("\nTask:\n" + workspace.prompt)
         return
+    if benchmark_profile != "basic" and not benchmark_prepare:
+        raise click.UsageError(
+            "--benchmark-profile requires --benchmark-prepare"
+        )
     if benchmark_evaluate is not None:
         from openjarvis.cli.code_benchmark import evaluate_code_benchmark
 
