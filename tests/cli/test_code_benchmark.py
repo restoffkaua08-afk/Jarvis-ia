@@ -30,13 +30,10 @@ def test_fixed_benchmark_passes_with_machine_readable_report(
     target = workspace.path / "calculator.py"
     target.write_text(
         target.read_text(encoding="utf-8").replace(
-            "return left + right\n",
-            "return left + right\n",
-            1,
-        ).replace(
+            "    # Intentional benchmark defect.\n"
             "    return left + right\n",
+            "    # Fixed by the benchmark participant.\n"
             "    return left - right\n",
-            1,
         ),
         encoding="utf-8",
     )
