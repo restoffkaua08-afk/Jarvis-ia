@@ -45,6 +45,12 @@ def test_quality_gate_requires_checks_after_project_edit() -> None:
     engine.engine_id = "mock"
     engine.generate.side_effect = [
         _response(
+            "Thought: inspect\nAction: file_read\nAction Input: {}"
+        ),
+        _response(
+            "Thought: status\nAction: git_status\nAction Input: {}"
+        ),
+        _response(
             "Thought: edit\nAction: apply_patch\nAction Input: {}"
         ),
         _response("Thought: done\nFinal Answer: complete"),
@@ -57,6 +63,8 @@ def test_quality_gate_requires_checks_after_project_edit() -> None:
         _response("Thought: verified\nFinal Answer: complete"),
     ]
     tools = [
+        _SuccessTool("file_read"),
+        _SuccessTool("git_status"),
         _SuccessTool("apply_patch"),
         _SuccessTool("shell_exec"),
         _SuccessTool("git_diff"),
@@ -65,13 +73,13 @@ def test_quality_gate_requires_checks_after_project_edit() -> None:
         engine,
         "test-model",
         tools=tools,
-        max_turns=6,
+        max_turns=8,
         quality_gate=True,
     )
 
     result = agent.run("Implement feature")
 
-    assert engine.generate.call_count == 5
+    assert engine.generate.call_count == 7
     assert result.content == "complete"
     assert result.metadata["quality_gate_passed"] is True
     assert result.metadata["quality_gate_missing"] == []
@@ -101,6 +109,12 @@ def test_quality_gate_reports_missing_verification_at_budget_end() -> None:
     engine.engine_id = "mock"
     engine.generate.side_effect = [
         _response(
+            "Thought: inspect\nAction: file_read\nAction Input: {}"
+        ),
+        _response(
+            "Thought: status\nAction: git_status\nAction Input: {}"
+        ),
+        _response(
             "Thought: edit\nAction: file_write\nAction Input: {}"
         ),
         _response("Thought: done\nFinal Answer: unverified"),
@@ -108,8 +122,12 @@ def test_quality_gate_reports_missing_verification_at_budget_end() -> None:
     agent = NativeReActAgent(
         engine,
         "test-model",
-        tools=[_SuccessTool("file_write")],
-        max_turns=2,
+        tools=[
+            _SuccessTool("file_read"),
+            _SuccessTool("git_status"),
+            _SuccessTool("file_write"),
+        ],
+        max_turns=4,
         quality_gate=True,
     )
 
@@ -118,3 +136,56 @@ def test_quality_gate_reports_missing_verification_at_budget_end() -> None:
     assert result.metadata["quality_gate_passed"] is False
     assert "shell_exec" in result.metadata["quality_gate_missing"][0]
     assert "git_diff" in result.metadata["quality_gate_missing"][1]
+
+
+def test_quality_gate_blocks_mutation_before_repository_inspection() -> None:
+    engine = MagicMock()
+    engine.engine_id = "mock"
+    engine.generate.side_effect = [
+        _response(
+            "Thought: edit immediately\n"
+            "Action: apply_patch\n"
+            "Action Input: {}"
+        ),
+        _response(
+            "Thought: inspect file\nAction: file_read\nAction Input: {}"
+        ),
+        _response(
+            "Thought: inspect state\nAction: git_status\nAction Input: {}"
+        ),
+        _response(
+            "Thought: edit safely\nAction: apply_patch\nAction Input: {}"
+        ),
+        _response(
+            "Thought: test\nAction: shell_exec\nAction Input: {}"
+        ),
+        _response(
+            "Thought: review\nAction: git_diff\nAction Input: {}"
+        ),
+        _response("Thought: done\nFinal Answer: complete"),
+    ]
+    tools = [
+        _SuccessTool("file_read"),
+        _SuccessTool("git_status"),
+        _SuccessTool("apply_patch"),
+        _SuccessTool("shell_exec"),
+        _SuccessTool("git_diff"),
+    ]
+    agent = NativeReActAgent(
+        engine,
+        "test-model",
+        tools=tools,
+        max_turns=8,
+        quality_gate=True,
+    )
+
+    result = agent.run("Implement safely")
+
+    attempts = [
+        item for item in result.tool_results if item.tool_name == "apply_patch"
+    ]
+    assert len(attempts) == 2
+    assert attempts[0].success is False
+    assert "Pre-edit quality gate" in attempts[0].content
+    assert attempts[1].success is True
+    assert result.metadata["quality_gate_passed"] is True
