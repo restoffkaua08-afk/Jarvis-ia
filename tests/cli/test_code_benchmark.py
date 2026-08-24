@@ -61,3 +61,56 @@ def test_benchmark_detects_out_of_scope_change(tmp_path: Path) -> None:
     assert report.diff_present is True
     assert report.scope_clean is False
     assert report.passed is False
+
+def test_multifile_profile_requires_every_contract_change(tmp_path: Path) -> None:
+    workspace = prepare_code_benchmark(tmp_path, profile="multifile")
+    validator = workspace.path / "validators.py"
+    validator.write_text(
+        validator.read_text(encoding="utf-8").replace(
+            "return email.lower()",
+            "return email.strip().lower()",
+        ),
+        encoding="utf-8",
+    )
+
+    report = evaluate_code_benchmark(workspace.path)
+
+    assert report.tests_passed is False
+    assert report.required_changes_present is False
+    assert report.missing_required_files == ("user_service.py",)
+    assert report.passed is False
+
+
+def test_multifile_profile_passes_only_after_coherent_repair(
+    tmp_path: Path,
+) -> None:
+    workspace = prepare_code_benchmark(tmp_path, profile="multifile")
+    validator = workspace.path / "validators.py"
+    service = workspace.path / "user_service.py"
+    validator.write_text(
+        validator.read_text(encoding="utf-8").replace(
+            "return email.lower()",
+            "return email.strip().lower()",
+        ),
+        encoding="utf-8",
+    )
+    service.write_text(
+        service.read_text(encoding="utf-8").replace(
+            '"active": "yes"',
+            '"active": True',
+        ),
+        encoding="utf-8",
+    )
+
+    report = evaluate_code_benchmark(workspace.path)
+
+    assert report.profile == "multifile"
+    assert report.score == 100
+    assert report.passed is True
+    assert report.changed_files == ("user_service.py", "validators.py")
+
+
+def test_unknown_benchmark_profile_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="Unknown benchmark profile"):
+        prepare_code_benchmark(tmp_path, profile="unknown")
+
