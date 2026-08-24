@@ -75,6 +75,7 @@ class NativeReActAgent(ToolUsingAgent):
         interactive: bool = False,
         confirm_callback=None,
         skill_few_shot_examples: Optional[List[str]] = None,
+        system_prompt_override: Optional[str] = None,
     ) -> None:
         super().__init__(
             engine,
@@ -88,6 +89,7 @@ class NativeReActAgent(ToolUsingAgent):
             confirm_callback=confirm_callback,
             skill_few_shot_examples=skill_few_shot_examples,
         )
+        self._system_prompt_override = system_prompt_override
 
     def _parse_response(self, text: str) -> dict:
         """Parse ReAct structured output."""
@@ -147,7 +149,9 @@ class NativeReActAgent(ToolUsingAgent):
             skill_examples_block = ""
         # Respect $OPENJARVIS_HOME override for the base template (M2+ work).
         prompt_template = (
-            load_system_prompt_override("native_react") or REACT_SYSTEM_PROMPT
+            self._system_prompt_override
+            or load_system_prompt_override("native_react")
+            or REACT_SYSTEM_PROMPT
         )
         # External overrides may not include the {skill_examples} slot.
         try:
