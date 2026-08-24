@@ -169,15 +169,58 @@ class CapabilityPolicy:
 
 # Default capability requirements for built-in tools
 DEFAULT_TOOL_CAPABILITIES: Dict[str, List[str]] = {
+    # Filesystem and version-control access
     "file_read": [Capability.FILE_READ],
+    "pdf_extract": [Capability.FILE_READ],
+    "audio_transcribe": [Capability.FILE_READ],
+    "git_status": [Capability.FILE_READ],
+    "git_diff": [Capability.FILE_READ],
+    "git_log": [Capability.FILE_READ],
+    "file_write": [Capability.FILE_WRITE],
+    "apply_patch": [Capability.FILE_WRITE],
+    "git_commit": [Capability.FILE_WRITE],
+
+    # Network, browser, and externally hosted media
     "web_search": [Capability.NETWORK_FETCH],
+    "http_request": [Capability.NETWORK_FETCH],
+    "browser_navigate": [Capability.NETWORK_FETCH],
+    "browser_click": [Capability.NETWORK_FETCH],
+    "browser_type": [Capability.NETWORK_FETCH],
+    "browser_screenshot": [Capability.NETWORK_FETCH],
+    "browser_extract": [Capability.NETWORK_FETCH],
+    "browser_axtree": [Capability.NETWORK_FETCH],
+    "image_generate": [Capability.NETWORK_FETCH],
+
+    # Code, shell, database, and REPL execution
     "code_interpreter": [Capability.CODE_EXECUTE],
+    "code_interpreter_docker": [Capability.CODE_EXECUTE],
+    "shell_exec": [Capability.CODE_EXECUTE],
+    "docker_shell_exec": [Capability.CODE_EXECUTE],
+    "repl": [Capability.CODE_EXECUTE],
+    "db_query": [Capability.CODE_EXECUTE],
+
+    # Working memory and knowledge stores
     "memory_store": [Capability.MEMORY_WRITE],
+    "memory_index": [Capability.MEMORY_WRITE],
     "memory_retrieve": [Capability.MEMORY_READ],
     "memory_search": [Capability.MEMORY_READ],
-    "memory_index": [Capability.MEMORY_WRITE],
-    "schedule_task": [Capability.SCHEDULE_CREATE],
+    "retrieval": [Capability.MEMORY_READ],
+    "knowledge_search": [Capability.MEMORY_READ],
+    "knowledge_sql": [Capability.MEMORY_READ],
+    "scan_chunks": [Capability.MEMORY_READ],
+    "kg_add_entity": [Capability.MEMORY_WRITE],
+    "kg_add_relation": [Capability.MEMORY_WRITE],
+    "kg_query": [Capability.MEMORY_READ],
+    "kg_neighbors": [Capability.MEMORY_READ],
+
+    # Communication, scheduling, and agent administration
     "channel_send": [Capability.CHANNEL_SEND],
+    "schedule_task": [Capability.SCHEDULE_CREATE],
+    "agent_spawn": [Capability.SYSTEM_ADMIN],
+    "agent_send": [Capability.SYSTEM_ADMIN],
+    "agent_list": [Capability.SYSTEM_ADMIN],
+    "agent_kill": [Capability.SYSTEM_ADMIN],
+    "skill_manage": [Capability.SYSTEM_ADMIN, Capability.FILE_WRITE],
 }
 
 
