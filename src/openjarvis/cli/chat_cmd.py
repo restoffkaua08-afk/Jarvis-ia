@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from pathlib import Path
 from typing import List, Optional
 
 import click
@@ -92,6 +93,7 @@ def _read_input(prompt: str = "You> ") -> Optional[str]:
     hidden=True,
 )
 @click.option("--quality-gate", is_flag=True, default=False, hidden=True)
+@click.option("--session-file", default="", hidden=True)
 @runtime_cli_options
 def chat(
     engine_key: str | None,
@@ -105,6 +107,7 @@ def chat(
     agent_max_turns: int | None,
     model_variant: str,
     quality_gate: bool,
+    session_file: str,
     num_ctx: int | None,
     num_gpu: int | None,
     skip_runtime_panel: bool,
@@ -356,6 +359,31 @@ def chat(
     if system_prompt:
         history.append(Message(role=Role.SYSTEM, content=system_prompt))
 
+    session_path = Path(session_file) if session_file else None
+    if session_path is not None:
+        try:
+            from openjarvis.cli.code_session import load_project_session
+
+            restored = load_project_session(Path.cwd(), path=session_path)
+            history.extend(restored)
+            if restored:
+                console.print(
+                    f"[dim]  Project session: restored {len(restored)} messages[/dim]"
+                )
+        except Exception as exc:
+            console.print(f"[yellow]Project session unavailable: {exc}[/yellow]")
+            session_path = None
+
+    def _save_session() -> None:
+        if session_path is None:
+            return
+        try:
+            from openjarvis.cli.code_session import save_project_session
+
+            save_project_session(Path.cwd(), history, path=session_path)
+        except Exception as exc:
+            console.print(f"[yellow]Project session save failed: {exc}[/yellow]")
+
     # REPL loop
     while True:
         for note in _notifications.diff(get_status()):
@@ -388,6 +416,7 @@ def chat(
             history = []
             if system_prompt:
                 history.append(Message(role=Role.SYSTEM, content=system_prompt))
+            _save_session()
             console.print("[dim]History cleared.[/dim]")
             continue
         elif cmd == "/model":
@@ -502,6 +531,7 @@ def chat(
                 content,
                 source="cli.chat",
             )
+            _save_session()
         except KeyboardInterrupt:
             console.print("\n[dim]Generation interrupted.[/dim]")
         except Exception as exc:
