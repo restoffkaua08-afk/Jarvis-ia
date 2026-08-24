@@ -78,6 +78,20 @@ def _read_input(prompt: str = "You> ") -> Optional[str]:
     default=False,
     help="Enable voice I/O: mic input with silence detection + TTS response playback.",
 )
+@click.option(
+    "--max-turns",
+    "agent_max_turns",
+    type=click.IntRange(1, 100),
+    default=None,
+    help="Override the maximum agent turns for this session.",
+)
+@click.option(
+    "--model-variant",
+    type=click.Choice(["chat", "short", "long", "code"]),
+    default="chat",
+    hidden=True,
+)
+@click.option("--quality-gate", is_flag=True, default=False, hidden=True)
 @runtime_cli_options
 def chat(
     engine_key: str | None,
@@ -88,6 +102,9 @@ def chat(
     system_prompt: str | None,
     persona_name: str | None,
     voice_mode: bool,
+    agent_max_turns: int | None,
+    model_variant: str,
+    quality_gate: bool,
     num_ctx: int | None,
     num_gpu: int | None,
     skip_runtime_panel: bool,
@@ -157,7 +174,7 @@ def chat(
             engine=engine,
             engine_name=engine_name,
             cli_model=model_name,
-            chat_variant="chat",
+            chat_variant=model_variant,
         )
     if not model:
         console.print("[red]No model available.[/red]")
@@ -221,7 +238,11 @@ def chat(
                                     tool_instances.append(tcls)
                         if tool_instances:
                             kwargs["tools"] = tool_instances
-                    kwargs["max_turns"] = config.agent.max_turns
+                    kwargs["max_turns"] = (
+                        agent_max_turns
+                        if agent_max_turns is not None
+                        else config.agent.max_turns
+                    )
 
                     def _confirm(prompt: str) -> bool:
                         console.print(
@@ -241,6 +262,8 @@ def chat(
                 ).parameters
                 if "system_prompt_override" in init_parameters and system_prompt:
                     kwargs["system_prompt_override"] = system_prompt
+                if "quality_gate" in init_parameters:
+                    kwargs["quality_gate"] = quality_gate
 
                 if "prompt_builder" in init_parameters:
                     from openjarvis.prompt.builder import SystemPromptBuilder
