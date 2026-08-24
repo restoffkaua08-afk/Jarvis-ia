@@ -112,3 +112,25 @@ class TestCapabilityPolicy:
         assert "file:read" in DEFAULT_TOOL_CAPABILITIES.get("file_read", [])
         assert "network:fetch" in DEFAULT_TOOL_CAPABILITIES.get("web_search", [])
         assert "code:execute" in DEFAULT_TOOL_CAPABILITIES.get("code_interpreter", [])
+
+    def test_effectful_builtin_tools_have_central_capability_fallbacks(self):
+        expected = {
+            "apply_patch": Capability.FILE_WRITE,
+            "browser_type": Capability.NETWORK_FETCH,
+            "docker_shell_exec": Capability.CODE_EXECUTE,
+            "git_commit": Capability.FILE_WRITE,
+            "http_request": Capability.NETWORK_FETCH,
+            "kg_add_entity": Capability.MEMORY_WRITE,
+            "memory_retrieve": Capability.MEMORY_READ,
+            "shell_exec": Capability.CODE_EXECUTE,
+            "skill_manage": Capability.SYSTEM_ADMIN,
+        }
+
+        for tool_name, capability in expected.items():
+            assert capability in DEFAULT_TOOL_CAPABILITIES[tool_name]
+
+    def test_skill_management_requires_admin_and_file_write(self):
+        assert DEFAULT_TOOL_CAPABILITIES["skill_manage"] == [
+            Capability.SYSTEM_ADMIN,
+            Capability.FILE_WRITE,
+        ]
