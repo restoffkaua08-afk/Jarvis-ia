@@ -32,6 +32,9 @@ Flags (when invoked directly rather than via `irm | iex`):
 | `-Service` | Register the scheduled task without prompting |
 | `-SkipService` | Don't prompt; don't register |
 | `-Force` | Re-run all steps even if already done |
+| `-CliOnly` | Install the terminal/agent stack without desktop-native |
+| `-SkipOllama` | Preserve model setup for a later or remote runtime |
+| `-Repository <URL>` | Install another trusted Jarvis source |
 
 `irm | iex` can't pass `param()` args into a piped script string, so
 the same knobs are honored via env vars when the corresponding flag is
@@ -43,7 +46,12 @@ irm https://open-jarvis.github.io/OpenJarvis/install.ps1 | iex
 ```
 
 The available env vars: `OPENJARVIS_SKIP_SERVICE`, `OPENJARVIS_SERVICE`,
-`OPENJARVIS_FORCE`. If you need richer control, save the script first
+`OPENJARVIS_FORCE`, `OPENJARVIS_CLI_ONLY`,
+`OPENJARVIS_SKIP_OLLAMA` and `OPENJARVIS_REPO_URL`.
+
+This project defaults to
+`https://github.com/restoffkaua08-afk/Jarvis-ia.git`. The installer validates
+`jarvis --help` and benchmark preparation before reporting success. If you need richer control, save the script first
 (`irm ... -OutFile install.ps1; .\install.ps1 -Force`).
 
 ## Manual scheduled-task setup
@@ -118,9 +126,14 @@ irm https://open-jarvis.github.io/OpenJarvis/install.ps1 | iex
 ## Uninstall
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\OpenJarvis\src\deploy\windows\jarvis-service.ps1" uninstall
-Remove-Item -Recurse -Force "$env:LOCALAPPDATA\OpenJarvis"
+$uninstaller = "$env:LOCALAPPDATA\OpenJarvis\src\deploy\windows\uninstall.ps1"
+powershell -ExecutionPolicy Bypass -File $uninstaller
 ```
+
+Use `-KeepData` to copy the installation data directory to a timestamped
+backup before removal. The uninstaller rejects dangerously broad paths,
+removes the Jarvis PATH entry and optional scheduled task, and asks for
+confirmation unless `-Force` is explicitly supplied.
 
 Uninstalling does NOT remove `uv` (it's a separate tool — you may have
 other Python projects using it).
