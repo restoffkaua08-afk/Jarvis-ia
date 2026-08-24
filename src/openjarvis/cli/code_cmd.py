@@ -71,6 +71,7 @@ def build_code_chat_kwargs(
     engine_key: str | None,
     model_name: str | None,
     tools: str | None,
+    strong: bool,
     pick_model: bool,
     max_turns: int,
     session_file: str,
@@ -99,6 +100,12 @@ def build_code_chat_kwargs(
     "--tools",
     default=None,
     help="Override the comma-separated coding tool set.",
+)
+@click.option(
+    "--strong",
+    is_flag=True,
+    default=False,
+    help="Use the strongest configured cloud coding model.",
 )
 @click.option(
     "--pick-model",
@@ -175,6 +182,29 @@ def code(
     benchmark_modes = sum(
         (check_only, benchmark_prepare, benchmark_evaluate is not None)
     )
+    if strong and benchmark_modes:
+        raise click.UsageError(
+            "--strong cannot be combined with diagnostics or benchmark setup"
+        )
+    if strong and (engine_key or model_name or pick_model):
+        raise click.UsageError(
+            "--strong cannot be combined with --engine, --model or --pick-model"
+        )
+    if strong:
+        from openjarvis.cli.code_model import (
+            select_strong_code_model,
+            strong_model_setup_hint,
+        )
+
+        selection = select_strong_code_model()
+        if selection is None:
+            raise click.ClickException(strong_model_setup_hint())
+        engine_key = selection.engine
+        model_name = selection.model
+        click.echo(
+            f"Strong model: {selection.provider}/{selection.model} "
+            f"(credential: {selection.credential_variable})"
+        )
     if benchmark_modes > 1:
         raise click.UsageError(
             "--check and benchmark options are mutually exclusive"
