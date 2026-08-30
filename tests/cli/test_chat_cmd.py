@@ -19,7 +19,7 @@ from openjarvis.agents._stubs import (
     ToolUsingAgent,
 )
 from openjarvis.cli._voice_chat import VOICE_EXIT, VoiceSession, record_voice, speak
-from openjarvis.cli.chat_cmd import _read_input, chat
+from openjarvis.cli.chat_cmd import _agent_capability_policy, _read_input, chat
 from openjarvis.core.config import JarvisConfig
 from openjarvis.core.events import Event, EventBus, EventType
 from openjarvis.core.registry import AgentRegistry, ToolRegistry
@@ -156,6 +156,67 @@ class TestReadInput:
     def test_read_input_normal(self) -> None:
         with mock.patch("builtins.input", return_value="hello"):
             assert _read_input() == "hello"
+
+
+class TestChatSecurityPolicy:
+    def test_chat_initializes_shared_security_pipeline(self) -> None:
+        engine = MagicMock()
+        secured_engine = MagicMock()
+        engine.engine_id = "mock"
+        secured_engine.engine_id = "secured-mock"
+        config = JarvisConfig()
+        config.intelligence.default_model = "test-model"
+        security_context = SimpleNamespace(
+            engine=secured_engine,
+            capability_policy=None,
+        )
+
+        with (
+            patch("openjarvis.cli.chat_cmd.load_config", return_value=config),
+            patch("openjarvis.engine.get_engine", return_value=("mock", engine)),
+            patch("openjarvis.intelligence.register_builtin_models"),
+            patch(
+                "openjarvis.security.setup_security",
+                return_value=security_context,
+            ) as setup_security,
+        ):
+            result = CliRunner().invoke(
+                chat,
+                ["--model", "test-model"],
+                input="/quit\n",
+            )
+
+        assert result.exit_code == 0
+        setup_security.assert_called_once()
+        assert setup_security.call_args.args[0] is config
+        assert setup_security.call_args.args[1] is engine
+        assert isinstance(setup_security.call_args.args[2], EventBus)
+
+    def test_regular_chat_preserves_configured_policy(self) -> None:
+        configured = object()
+
+        resolved = _agent_capability_policy(
+            configured,
+            agent_id="tool_chat_agent",
+            tools=[_DangerousChatTool()],
+            quality_gate=False,
+        )
+
+        assert resolved is configured
+
+    def test_quality_gate_uses_tool_scoped_default_deny(self) -> None:
+        from openjarvis.tools.file_read import FileReadTool
+
+        resolved = _agent_capability_policy(
+            None,
+            agent_id="native_react",
+            tools=[FileReadTool()],
+            quality_gate=True,
+        )
+
+        assert resolved is not None
+        assert resolved.check("native_react", "file:read", "file_read") is True
+        assert resolved.check("native_react", "file:write", "file_write") is False
 
 
 class TestVoiceInput:

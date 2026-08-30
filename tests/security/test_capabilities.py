@@ -6,6 +6,7 @@ from openjarvis.security.capabilities import (
     DEFAULT_TOOL_CAPABILITIES,
     Capability,
     CapabilityPolicy,
+    build_tool_scoped_policy,
 )
 
 
@@ -148,6 +149,36 @@ class TestCapabilityPolicy:
 
         for tool_name, capability in expected.items():
             assert capability in DEFAULT_TOOL_CAPABILITIES[tool_name]
+
+
+class TestToolScopedPolicy:
+    def test_grants_only_selected_tool_resources(self) -> None:
+        from openjarvis.tools.file_read import FileReadTool
+
+        policy = build_tool_scoped_policy("native_react", [FileReadTool()])
+
+        assert policy.check("native_react", "file:read", "file_read") is True
+        assert policy.check("native_react", "file:read", "git_status") is False
+        assert policy.check("native_react", "file:write", "file_write") is False
+
+    def test_combines_multi_capability_tool_without_global_grants(self) -> None:
+        from openjarvis.tools.skill_repo import SkillRepoInstallTool
+
+        policy = build_tool_scoped_policy(
+            "native_react",
+            [SkillRepoInstallTool()],
+        )
+
+        for capability in ("network:fetch", "file:write", "system:admin"):
+            assert (
+                policy.check(
+                    "native_react",
+                    capability,
+                    "skill_repo_install",
+                )
+                is True
+            )
+            assert policy.check("native_react", capability, "other_tool") is False
 
     def test_skill_management_requires_admin_and_file_write(self):
         assert DEFAULT_TOOL_CAPABILITIES["skill_manage"] == [

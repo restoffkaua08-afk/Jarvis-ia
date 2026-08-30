@@ -38,6 +38,26 @@ def _read_input(prompt: str = "You> ") -> Optional[str]:
         return None
 
 
+def _agent_capability_policy(
+    configured_policy: object | None,
+    *,
+    agent_id: str,
+    tools: list[object],
+    quality_gate: bool,
+) -> object | None:
+    """Resolve the policy used by one interactive agent.
+
+    Regular chat respects the configured policy. Quality-gated code sessions
+    receive a deny-by-default policy scoped to the exact selected tool names.
+    """
+    if not quality_gate or not tools:
+        return configured_policy
+
+    from openjarvis.security.capabilities import build_tool_scoped_policy
+
+    return build_tool_scoped_policy(agent_id, tools)
+
+
 @click.command()
 @click.option("-e", "--engine", "engine_key", default=None, help="Engine backend.")
 @click.option(
@@ -221,6 +241,14 @@ def chat(
         runtime_opts = ChatRuntimeOptions()
     engine_kwargs = runtime_opts.to_engine_kwargs(engine_name=engine_name)
 
+    # Apply the same security pipeline used by ``ask`` and ``serve``. Code
+    # mode delegates to this command, so omitting this step would silently
+    # bypass scanners, audit setup and capability enforcement for its tools.
+    from openjarvis.security import setup_security
+
+    sec = setup_security(config, engine, bus)
+    engine = sec.engine
+
     # Resolve agent (optional)
     agent = None
     agent_key = agent_name or config.agent.default_agent
@@ -232,6 +260,7 @@ def chat(
             if AgentRegistry.contains(agent_key):
                 agent_cls = AgentRegistry.get(agent_key)
                 kwargs: dict = {"bus": bus}
+                tool_instances = []
 
                 if getattr(agent_cls, "accepts_tools", False):
                     tool_names_list = resolve_tool_names(
@@ -244,7 +273,6 @@ def chat(
                         from openjarvis.core.registry import ToolRegistry
                         from openjarvis.tools._stubs import BaseTool
 
-                        tool_instances = []
                         for tname in tool_names_list:
                             if ToolRegistry.contains(tname):
                                 tcls = ToolRegistry.get(tname)
@@ -275,9 +303,18 @@ def chat(
 
                 import inspect as _inspect
 
-                init_parameters = _inspect.signature(
-                    agent_cls.__init__
-                ).parameters
+                init_parameters = _inspect.signature(agent_cls.__init__).parameters
+                capability_policy = _agent_capability_policy(
+                    sec.capability_policy,
+                    agent_id=agent_key,
+                    tools=tool_instances,
+                    quality_gate=quality_gate,
+                )
+                if (
+                    "capability_policy" in init_parameters
+                    and capability_policy is not None
+                ):
+                    kwargs["capability_policy"] = capability_policy
                 if "system_prompt_override" in init_parameters and system_prompt:
                     kwargs["system_prompt_override"] = system_prompt
                 if "quality_gate" in init_parameters:

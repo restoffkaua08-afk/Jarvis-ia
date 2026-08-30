@@ -8,7 +8,7 @@ import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +70,7 @@ class CapabilityPolicy:
             from openjarvis._rust_bridge import get_rust_module
 
             _rust = get_rust_module()
-            self._rust_impl = _rust.CapabilityPolicy(
-                default_deny=default_deny
-            )
+            self._rust_impl = _rust.CapabilityPolicy(default_deny=default_deny)
         except (ImportError, AttributeError) as exc:
             logger.debug(
                 "Rust capability policy unavailable; using Python fallback: %s",
@@ -180,6 +178,27 @@ class CapabilityPolicy:
         path.write_text(json.dumps({"agents": agents}, indent=2))
 
 
+def build_tool_scoped_policy(
+    agent_id: str,
+    tools: Iterable[Any],
+) -> CapabilityPolicy:
+    """Build a deny-by-default policy limited to the supplied tools.
+
+    Capabilities are granted against the concrete tool name as the resource.
+    Selecting one file-reading tool therefore does not authorize every other
+    tool that also happens to require ``file:read``.
+    """
+    policy = CapabilityPolicy(default_deny=True)
+    for tool in tools:
+        spec = tool.spec
+        required = list(spec.required_capabilities)
+        if not required:
+            required = list(DEFAULT_TOOL_CAPABILITIES.get(spec.name, []))
+        for capability in required:
+            policy.grant(agent_id, capability, spec.name)
+    return policy
+
+
 # Default capability requirements for built-in tools
 DEFAULT_TOOL_CAPABILITIES: Dict[str, List[str]] = {
     # Filesystem and version-control access
@@ -192,7 +211,6 @@ DEFAULT_TOOL_CAPABILITIES: Dict[str, List[str]] = {
     "file_write": [Capability.FILE_WRITE],
     "apply_patch": [Capability.FILE_WRITE],
     "git_commit": [Capability.FILE_WRITE],
-
     # Network, browser, and externally hosted media
     "web_search": [Capability.NETWORK_FETCH],
     "http_request": [Capability.NETWORK_FETCH],
@@ -203,7 +221,6 @@ DEFAULT_TOOL_CAPABILITIES: Dict[str, List[str]] = {
     "browser_extract": [Capability.NETWORK_FETCH],
     "browser_axtree": [Capability.NETWORK_FETCH],
     "image_generate": [Capability.NETWORK_FETCH],
-
     # Code, shell, database, and REPL execution
     "code_interpreter": [Capability.CODE_EXECUTE],
     "code_interpreter_docker": [Capability.CODE_EXECUTE],
@@ -211,7 +228,6 @@ DEFAULT_TOOL_CAPABILITIES: Dict[str, List[str]] = {
     "docker_shell_exec": [Capability.CODE_EXECUTE],
     "repl": [Capability.CODE_EXECUTE],
     "db_query": [Capability.CODE_EXECUTE],
-
     # Working memory and knowledge stores
     "memory_store": [Capability.MEMORY_WRITE],
     "memory_index": [Capability.MEMORY_WRITE],
@@ -225,7 +241,6 @@ DEFAULT_TOOL_CAPABILITIES: Dict[str, List[str]] = {
     "kg_add_relation": [Capability.MEMORY_WRITE],
     "kg_query": [Capability.MEMORY_READ],
     "kg_neighbors": [Capability.MEMORY_READ],
-
     # Communication, scheduling, and agent administration
     "channel_send": [Capability.CHANNEL_SEND],
     "schedule_task": [Capability.SCHEDULE_CREATE],
@@ -243,4 +258,5 @@ __all__ = [
     "CapabilityGrant",
     "CapabilityPolicy",
     "DEFAULT_TOOL_CAPABILITIES",
+    "build_tool_scoped_policy",
 ]
