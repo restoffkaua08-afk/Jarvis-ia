@@ -211,6 +211,18 @@ class OrchestratorAgent(ToolUsingAgent):
                 messages.append(Message(role=Role.USER, content=observation))
                 continue
 
+            # Self-Diagnostic Trigger: if multiple tools failed, hint at system_health_check
+            failures = [r for r in all_tool_results if not r.success]
+            if len(failures) >= 2:
+                # Only hint if system_health_check is actually available in the toolkit
+                if any(t.spec.name == "system_health_check" for t in self._tools):
+                    messages.append(
+                        Message(
+                            role=Role.USER,
+                            content="[Diagnostic Hint] Multiple tools failed. Consider using 'system_health_check' to diagnose the environment."
+                        )
+                    )
+
             # Neither -> treat content as final answer
             self._emit_turn_end(turns=turns)
             return AgentResult(
@@ -516,6 +528,18 @@ class OrchestratorAgent(ToolUsingAgent):
                             content=tool_result.content,
                             tool_call_id=tc.id,
                             name=tc.name,
+                        )
+                    )
+
+            # Self-Diagnostic Trigger: if multiple tools failed, hint at system_health_check
+            failures = [r for r in all_tool_results if not r.success]
+            if len(failures) >= 2:
+                # Only hint if system_health_check is actually available in the toolkit
+                if any(t.spec.name == "system_health_check" for t in self._tools):
+                    messages.append(
+                        Message(
+                            role=Role.USER,
+                            content="[Diagnostic Hint] Multiple tools failed. Consider using 'system_health_check' to diagnose the environment."
                         )
                     )
 

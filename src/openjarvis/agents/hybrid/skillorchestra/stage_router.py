@@ -516,6 +516,7 @@ ROUTING_STRATEGIES = {
     "weighted_avg": WeightedAverageStrategy,
     "weakest_skill": WeakestSkillStrategy,
     "strongest_skill": StrongestSkillStrategy,
+    "adaptive_feedback": AdaptiveFeedbackStrategy,
 }
 
 

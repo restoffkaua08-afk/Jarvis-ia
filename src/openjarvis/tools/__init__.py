@@ -8,6 +8,11 @@ from openjarvis.tools._stubs import BaseTool, ToolExecutor, ToolSpec
 # Each is wrapped in try/except so the package loads even before the
 # individual tool modules are created.
 try:
+    import openjarvis.tools.system.health  # noqa: F401
+except ImportError:
+    pass
+
+try:
     import openjarvis.tools.calculator  # noqa: F401
 except ImportError:
     pass
